@@ -1,2 +1,5 @@
 os.img
 *.bin
+*.o
+*.elf
+/target

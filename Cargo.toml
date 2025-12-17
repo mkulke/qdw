@@ -1,0 +1,21 @@
+[package]
+name = "qdw"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "qdw"
+path = "src/main.rs"
+test = false
+doctest = false
+bench = false
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+
+[dependencies]

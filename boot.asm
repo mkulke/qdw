@@ -19,7 +19,7 @@ start:
     ; Assumes QEMU boots from this image as drive 0x80.
     mov bx, 0x8000        ; ES:BX = 0000:8000
     mov ah, 0x02          ; read sectors
-    mov al, 16            ; number of sectors to read
+    mov al, 0x80          ; number of sectors to read
     mov ch, 0x00          ; cylinder
     mov cl, 0x02          ; sector (starts at 1), so sector 2 = immediately after boot sector
     mov dh, 0x00          ; head

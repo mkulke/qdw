@@ -1,6 +1,12 @@
-; stage2.asm — sets up long mode, prints "hello" to COM1, then halts
 BITS 16
-ORG 0x8000
+section .text
+
+extern kmain
+
+global start16
+global serial_init
+global serial_putc
+global serial_print
 
 start16:
     cli
@@ -65,43 +71,11 @@ lm64_entry:
     mov rsp, 0x90000
 
     call serial_init
+	call kmain
 
-	xor rcx, rcx          ; clear RCX to use as a counter
-loop:
-    lea rsi, [rel msg]
-    call serial_lprint
-
-	mov al, cl            ; load low byte of counter
-	xor ah, ah            ; clear high byte
-	mov bl, 10
-	div bl			      ; divide by 10
-	mov al, ah            ; AL = remainder (digit to print)
-	add al, '0'           ; convert to ASCII
-
-    mov dil, al
-    call serial_putc
-
-	mov rdi, 9000000000   ; approx 3s
-	call delay
-
-	inc rcx
-	jmp loop
-
-; rdi = number of cycles to wait
-delay:
-    rdtsc                       ; EDX:EAX = timestamp
-    shl rdx, 32
-    or rax, rdx                 ; RAX = full 64-bit timestamp
-    add rdi, rax                ; RDI = end time (start + delay)
-
-.wait_loop:
-    rdtsc                       ; Read current timestamp
-    shl rdx, 32
-    or rax, rdx                 ; RAX = current time
-    cmp rax, rdi                ; Compare current time to end time
-    jb .wait_loop               ; Loop if current < end
-
-   ret
+.hang:
+    hlt
+    jmp .hang
 
 ; -------- Serial (COM1 = 0x3F8) --------
 serial_init:
@@ -144,20 +118,6 @@ serial_putc:
     mov al, dil
     out dx, al
     ret
-
-serial_lprint:
-    ; RSI -> 0-terminated string
-.next:
-    lodsb
-    test al, al
-    jz .done
-    mov dil, al
-    call serial_putc
-    jmp .next
-.done:
-    ret
-
-msg: db 13, 10, "tick #", 0
 
 ; -------- GDT (flat data, 32-bit code, 64-bit code) --------
 ALIGN 8

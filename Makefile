@@ -9,7 +9,7 @@ boot.bin: boot.asm
 stage2.o: stage2.asm
 	nasm -f elf64 $< -o $@
 
-rust.o: src/main.rs
+rust.o: src/*.rs Cargo.toml Cargo.lock
 	cargo +nightly rustc --release --target $(TARGET) \
 		-Z build-std=core,compiler_builtins \
 		-Z build-std-features=compiler-builtins-mem \

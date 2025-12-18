@@ -4,6 +4,7 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use lapic::{lapic, ERROR_VECTOR, SPURIOUS_VECTOR, TIMER_VECTOR};
+use serial::{write_hex_u8, write_str};
 use spin::Once;
 use x86_64::instructions::{self, interrupts};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
@@ -16,6 +17,7 @@ const TICKS_PER_3_SECONDS: usize = 55;
 
 mod lapic;
 mod mem;
+mod serial;
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let ticks = TICK_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
@@ -34,10 +36,6 @@ extern "x86-interrupt" fn error_interrupt_handler(_sf: InterruptStackFrame) {
 
 extern "x86-interrupt" fn spurious_interrupt_handler(_sf: InterruptStackFrame) {
     lapic().eof();
-}
-
-unsafe extern "C" {
-    fn serial_putc(ch: u8);
 }
 
 #[panic_handler]
@@ -59,7 +57,7 @@ pub extern "C" fn kmain() -> ! {
     lapic().init();
     lapic().enable();
 
-    write_str("\r\n");
+    serial::write_str("\r\n");
     interrupts::enable();
 
     let mut counter = 0;
@@ -68,20 +66,10 @@ pub extern "C" fn kmain() -> ! {
 
         let n = PRINT_EVENTS.swap(0, Ordering::AcqRel);
         for _ in 0..n {
-            write_str("tick #");
-            unsafe {
-                serial_putc(b'0' + (counter % 10));
-            }
+            write_str("tick 0x");
+            write_hex_u8(counter as u8);
             write_str("\r\n");
             counter += 1;
-        }
-    }
-}
-
-fn write_str(s: &str) {
-    for &b in s.as_bytes() {
-        unsafe {
-            serial_putc(b);
         }
     }
 }

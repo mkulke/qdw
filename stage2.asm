@@ -70,8 +70,7 @@ lm64_entry:
     mov ss, ax
     mov rsp, 0x90000
 
-    call serial_init
-	call kmain
+    call kmain
 
 .hang:
     hlt

@@ -4,6 +4,7 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use lapic::{lapic, ERROR_VECTOR, SPURIOUS_VECTOR, TIMER_VECTOR};
+use serial::SerialWriter;
 use spin::Once;
 use x86_64::instructions::{self, interrupts};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
@@ -30,7 +31,6 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(_sf: InterruptStackFrame) {
-    serial::write_str("lapic error");
     lapic().eof();
 }
 
@@ -54,28 +54,27 @@ fn write_xmm_values() {
     fpu::set_xmm15_bytes(&xmm);
 }
 
-fn dump_fpu_fxsave() {
+fn dump_fpu_fxsave(tty: &mut SerialWriter) {
     let mut area = fpu::FxSaveAligned::new_zeroed();
     fpu::fxsave64(&mut area);
 
-    serial::write_str("=== fxsave64 ===");
-    serial::write_rn();
-    serial::write_str("mxcsr=0x");
-    serial::write_hex_u32(area.0.mxcsr);
-    serial::write_rn();
+    tty.write_str("=== fxsave64 ===\r\n");
+    tty.write_str("mxcsr=0x");
+    tty.write_hex_u32(area.0.mxcsr);
+    tty.write_str("\r\n");
 
     // for i in 0..16 {
     for i in [0, 15] {
-        serial::write_str("xmm");
+        tty.write_str("xmm");
         if i < 10 {
-            serial::write_str("0");
+            tty.write_char(b'0');
         }
-        serial::write_dec_u8(i as u8);
-        serial::write_str("=");
+        tty.write_dec_u8(i as u8);
+        tty.write_char(b'=');
         for &b in &area.0.xmm[i] {
-            serial::write_hex_u8(b);
+            tty.write_hex_u8(b);
         }
-        serial::write_rn();
+        tty.write_str("\r\n");
     }
 }
 
@@ -93,7 +92,8 @@ pub extern "C" fn kmain() -> ! {
     lapic().init();
     lapic().enable();
 
-    serial::write_rn();
+    let mut tty = SerialWriter::new();
+    tty.write_str("\r\n");
     interrupts::enable();
 
     fpu::enable_sse();
@@ -105,10 +105,10 @@ pub extern "C" fn kmain() -> ! {
 
         let n = PRINT_EVENTS.swap(0, Ordering::AcqRel);
         for _ in 0..n {
-            serial::write_str("tick 0x");
-            serial::write_hex_u8(counter as u8);
-            serial::write_rn();
-            dump_fpu_fxsave();
+            tty.write_str("tick 0x");
+            tty.write_hex_u8(counter as u8);
+            tty.write_str("\r\n");
+            dump_fpu_fxsave(&mut tty);
             counter += 1;
         }
     }

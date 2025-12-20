@@ -4,9 +4,6 @@ section .text
 extern kmain
 
 global start16
-global serial_init
-global serial_putc
-global serial_print
 
 start16:
     cli
@@ -75,48 +72,6 @@ lm64_entry:
 .hang:
     hlt
     jmp .hang
-
-; -------- Serial (COM1 = 0x3F8) --------
-serial_init:
-    mov dx, 0x3F8 + 1      ; IER
-    xor al, al
-    out dx, al
-
-    mov dx, 0x3F8 + 3      ; LCR
-    mov al, 0x80           ; DLAB=1
-    out dx, al
-
-    mov dx, 0x3F8 + 0      ; DLL (divisor low) -> 115200/3 = 38400 baud
-    mov al, 3
-    out dx, al
-    mov dx, 0x3F8 + 1      ; DLM
-    xor al, al
-    out dx, al
-
-    mov dx, 0x3F8 + 3      ; LCR
-    mov al, 0x03           ; 8N1, DLAB=0
-    out dx, al
-
-    mov dx, 0x3F8 + 2      ; FCR
-    mov al, 0xC7           ; enable FIFO, clear, 14-byte threshold
-    out dx, al
-
-    mov dx, 0x3F8 + 4      ; MCR
-    mov al, 0x0B           ; IRQs off, RTS/DSR set
-    out dx, al
-    ret
-
-serial_putc:
-    ; wait for THR empty
-.wait:
-    mov dx, 0x3F8 + 5      ; LSR
-    in  al, dx
-    test al, 0x20
-    jz .wait
-    mov dx, 0x3F8 + 0
-    mov al, dil
-    out dx, al
-    ret
 
 ; -------- GDT (flat data, 32-bit code, 64-bit code) --------
 ALIGN 8

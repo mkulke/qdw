@@ -2,23 +2,24 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
+use core::fmt::{LowerHex, Write};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use lapic::{lapic, ERROR_VECTOR, SPURIOUS_VECTOR, TIMER_VECTOR};
-use serial::SerialWriter;
-use spin::Once;
+use spin::{Mutex, Once};
+use uart_16550::SerialPort;
 use x86_64::instructions::{self, interrupts};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
 static IDT: Once<InterruptDescriptorTable> = Once::new();
 static TICK_COUNT: AtomicUsize = AtomicUsize::new(0);
 static PRINT_EVENTS: AtomicUsize = AtomicUsize::new(0);
+static SERIAL1: Mutex<SerialPort> = Mutex::new(unsafe { SerialPort::new(0x3F8) });
 
 const TICKS_PER_3_SECONDS: usize = 55;
 
 mod fpu;
 mod lapic;
 mod mem;
-mod serial;
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let ticks = TICK_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
@@ -54,27 +55,28 @@ fn write_xmm_values() {
     fpu::set_xmm15_bytes(&xmm);
 }
 
-fn dump_fpu_fxsave(tty: &mut SerialWriter) {
+struct XmmBytes([u8; 16]);
+
+impl LowerHex for XmmBytes {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for &b in self.0.iter().rev() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+fn dump_fpu_fxsave() {
     let mut area = fpu::FxSaveAligned::new_zeroed();
     fpu::fxsave64(&mut area);
 
-    tty.write_str("=== fxsave64 ===\r\n");
-    tty.write_str("mxcsr=0x");
-    tty.write_hex_u32(area.0.mxcsr);
-    tty.write_str("\r\n");
+    writeln!(SERIAL1.lock(), "=== fxsave64 ===").unwrap();
+    writeln!(SERIAL1.lock(), "mxcsr=0x{:x}", area.0.mxcsr).unwrap();
 
     // for i in 0..16 {
     for i in [0, 15] {
-        tty.write_str("xmm");
-        if i < 10 {
-            tty.write_char(b'0');
-        }
-        tty.write_dec_u8(i as u8);
-        tty.write_char(b'=');
-        for &b in &area.0.xmm[i] {
-            tty.write_hex_u8(b);
-        }
-        tty.write_str("\r\n");
+        let value = XmmBytes(area.0.xmm[i]);
+        writeln!(SERIAL1.lock(), "xmm{:02}=0x{:x}", i, value).unwrap();
     }
 }
 
@@ -92,8 +94,7 @@ pub extern "C" fn kmain() -> ! {
     lapic().init();
     lapic().enable();
 
-    let mut tty = SerialWriter::new();
-    tty.write_str("\r\n");
+    SERIAL1.lock().init();
     interrupts::enable();
 
     fpu::enable_sse();
@@ -105,10 +106,8 @@ pub extern "C" fn kmain() -> ! {
 
         let n = PRINT_EVENTS.swap(0, Ordering::AcqRel);
         for _ in 0..n {
-            tty.write_str("tick 0x");
-            tty.write_hex_u8(counter as u8);
-            tty.write_str("\r\n");
-            dump_fpu_fxsave(&mut tty);
+            writeln!(SERIAL1.lock(), "tick 0x{0:02x}", counter).unwrap();
+            dump_fpu_fxsave();
             counter += 1;
         }
     }

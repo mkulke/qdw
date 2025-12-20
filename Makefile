@@ -11,7 +11,7 @@ stage2.o: stage2.asm
 
 rust.o: src/*.rs Cargo.toml Cargo.lock
 	cargo +nightly rustc --release --target $(TARGET) \
-		-Z build-std=core,compiler_builtins \
+		-Z build-std=core,alloc,compiler_builtins \
 		-Z build-std-features=compiler-builtins-mem \
 		-- -C relocation-model=static --emit=obj && \
 	cp $$(ls -t target/x86_64-unknown-none/release/deps/qdw-*.o | head -1) $@

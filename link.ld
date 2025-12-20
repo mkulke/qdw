@@ -12,4 +12,8 @@ SECTIONS
     *(.bss .bss.*)
     *(COMMON)
   }
+
+  . = ALIGN(16);
+  __heap_start = .;
+  __heap_end = 0x1000000; /* Up to 16MB */
 }

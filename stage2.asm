@@ -26,14 +26,24 @@ pm32_entry:
     mov ss, ax
     mov esp, 0x90000
 
-    ; -------- Paging structures (identity map first 2 MiB using 2MiB page) --------
+    ; -------- Paging structures (identity map first 16 MiB using 2MiB pages) --------
     ; We place them at 0xA0000+
     mov dword [pml4+0], pdpt + 0x003         ; PML4[0] -> PDPT, P=1 RW=1
     mov dword [pml4+4], 0
     mov dword [pdpt+0], pd + 0x003           ; PDPT[0] -> PD,  P=1 RW=1
     mov dword [pdpt+4], 0
-    mov dword [pd+0], 0x00000083             ; PD[0]  -> 2MiB page, P=1 RW=1 PS=1
-    mov dword [pd+4], 0
+
+	; Map first 8 x 2MiB pages
+	; Each entry: physical_addr | flags (0x83 = P=1 RW=1 PS=1)
+	mov edi, pd
+	mov eax, 0x00000083
+	mov ecx, 8      						 ; 8 entries
+.map_loop:
+	mov [edi], eax
+	mov dword [edi+4], 0 					 ; upper 32 bits = 0
+	add eax, 0x00200000                      ; next 2MiB
+	add edi, 8 								 ; next PD entry
+	loop .map_loop
 
     ; Load CR3 with PML4
     mov eax, pml4

@@ -2,13 +2,21 @@
 #![no_main]
 #![feature(abi_x86_interrupt)]
 
+extern crate alloc;
+
+use alloc::format;
 use core::fmt::{LowerHex, Write};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use lapic::{lapic, ERROR_VECTOR, SPURIOUS_VECTOR, TIMER_VECTOR};
+use linked_list_allocator::LockedHeap;
 use spin::{Mutex, Once};
 use uart_16550::SerialPort;
 use x86_64::instructions::{self, interrupts};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
+
+mod fpu;
+mod lapic;
+mod mem;
 
 static IDT: Once<InterruptDescriptorTable> = Once::new();
 static TICK_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -17,9 +25,23 @@ static SERIAL1: Mutex<SerialPort> = Mutex::new(unsafe { SerialPort::new(0x3F8) }
 
 const TICKS_PER_3_SECONDS: usize = 55;
 
-mod fpu;
-mod lapic;
-mod mem;
+unsafe extern "C" {
+    static __heap_start: u8;
+    static __heap_end: u8;
+}
+
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
+
+pub fn init_heap() {
+    unsafe {
+        let start = &__heap_start as *const u8 as *mut u8;
+        let end = &__heap_end as *const u8 as *mut u8;
+        let size = end as usize - start as usize;
+
+        ALLOCATOR.lock().init(start, size);
+    }
+}
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let ticks = TICK_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
@@ -76,12 +98,14 @@ fn dump_fpu_fxsave(tty: &mut SerialPort) {
     // for i in 0..16 {
     for i in [0, 15] {
         let value = XmmBytes(area.0.xmm[i]);
-        writeln!(tty, "xmm{:02}={:x}", i, value).unwrap();
+        let line = format!("xmm{:02}={:x}", i, value);
+        writeln!(tty, "{}", line).unwrap();
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn kmain() -> ! {
+fn init() {
+    init_heap();
+
     let idt = IDT.call_once(|| {
         let mut idt = InterruptDescriptorTable::new();
         idt[TIMER_VECTOR].set_handler_fn(timer_interrupt_handler);

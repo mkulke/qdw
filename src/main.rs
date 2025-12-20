@@ -66,17 +66,17 @@ impl LowerHex for XmmBytes {
     }
 }
 
-fn dump_fpu_fxsave() {
+fn dump_fpu_fxsave(tty: &mut SerialPort) {
     let mut area = fpu::FxSaveAligned::new_zeroed();
     fpu::fxsave64(&mut area);
 
-    writeln!(SERIAL1.lock(), "=== fxsave64 ===").unwrap();
-    writeln!(SERIAL1.lock(), "mxcsr=0x{:x}", area.0.mxcsr).unwrap();
+    writeln!(tty, "=== fxsave64 ===").unwrap();
+    writeln!(tty, "mxcsr=0x{:x}", area.0.mxcsr).unwrap();
 
     // for i in 0..16 {
     for i in [0, 15] {
         let value = XmmBytes(area.0.xmm[i]);
-        writeln!(SERIAL1.lock(), "xmm{:02}=0x{:x}", i, value).unwrap();
+        writeln!(tty, "xmm{:02}={:x}", i, value).unwrap();
     }
 }
 
@@ -94,21 +94,29 @@ pub extern "C" fn kmain() -> ! {
     lapic().init();
     lapic().enable();
 
-    SERIAL1.lock().init();
     interrupts::enable();
 
     fpu::enable_sse();
+
+    SERIAL1.lock().init();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kmain() -> ! {
+    init();
+
     write_xmm_values();
 
-    let mut counter = 0;
+    let mut tick_counter = 0;
     loop {
         instructions::hlt();
 
         let n = PRINT_EVENTS.swap(0, Ordering::AcqRel);
         for _ in 0..n {
-            writeln!(SERIAL1.lock(), "tick 0x{0:02x}", counter).unwrap();
-            dump_fpu_fxsave();
-            counter += 1;
+            let mut tty = SERIAL1.lock();
+            writeln!(tty, "tick 0x{0:02x}", tick_counter).unwrap();
+            dump_fpu_fxsave(&mut *tty);
+            tick_counter += 1;
         }
     }
 }

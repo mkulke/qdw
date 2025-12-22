@@ -30,5 +30,17 @@ os.img: boot.bin stage2.bin
 	dd if=stage2.bin of=os.img bs=512 seek=1 conv=notrunc
 
 .PHONY:
+run: os.img
+	qemu-system-x86_64 \
+		-cpu qemu64 \
+		-nographic \
+		-no-reboot \
+		-drive format=raw,file=$(CURDIR)/os.img \
+		-accel kvm \
+		-smp cpus=1 \
+		-m 128M
+
+
+.PHONY:
 clean:
 	rm -rf *.bin *.elf *.o target os.img

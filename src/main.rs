@@ -50,15 +50,15 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
         PRINT_EVENTS.fetch_add(1, Ordering::Relaxed);
     }
 
-    lapic().eof();
+    lapic().eoi();
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(_sf: InterruptStackFrame) {
-    lapic().eof();
+    lapic().eoi();
 }
 
 extern "x86-interrupt" fn spurious_interrupt_handler(_sf: InterruptStackFrame) {
-    lapic().eof();
+    lapic().eoi();
 }
 
 #[panic_handler]

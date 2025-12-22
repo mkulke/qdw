@@ -62,7 +62,7 @@ impl Lapic {
         }
     }
 
-    pub fn eof(&mut self) {
+    pub fn eoi(&mut self) {
         if let LapicState::Initialized(lapic) = &mut self.state {
             unsafe {
                 lapic.end_of_interrupt();

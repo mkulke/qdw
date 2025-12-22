@@ -45,6 +45,19 @@ pm32_entry:
 	add edi, 8 								 ; next PD entry
 	loop .map_loop
 
+	; -------- Map MMIO (I/O APIC) --------
+
+    ; PDPT entry 3 covers 0xC0000000 - 0xFFFFFFFF
+    mov dword [pdpt+24], pd_high + 0x003  ; PDPT[3] -> pd_high
+    mov dword [pdpt+28], 0
+
+    ; Map page directory entry for 0xFEC00000
+    ; 0xFEC00000 / 0x200000 = entry 502 in the PD
+	mov dword [pd_high + 502*8], 0xFEC00083  ; Identity map I/O APIC
+	mov dword [pd_high + 502*8 + 4], 0
+
+	; -------- Transition to long mode --------
+
     ; Load CR3 with PML4
     mov eax, pml4
     mov cr3, eax
@@ -102,9 +115,11 @@ CODE64_SEL  equ 0x18
 
 ; -------- Page tables --------
 ALIGN 4096
-pml4: times 512 dq 0
+pml4:    times 512 dq 0
 ALIGN 4096
-pdpt: times 512 dq 0
+pdpt:    times 512 dq 0
 ALIGN 4096
-pd:   times 512 dq 0
+pd:      times 512 dq 0
+ALIGN 4096
+pd_high: times 512 dq 0
 

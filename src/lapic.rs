@@ -6,7 +6,7 @@ pub const ERROR_VECTOR: u8 = 0x21;
 pub const SPURIOUS_VECTOR: u8 = 0xFF;
 
 const APIC_TIMER_DIVIDE: TimerDivide = TimerDivide::Div16;
-const APIC_TIMER_INITIAL: u32 = 500_000;
+const APIC_TIMER_INITIAL: u32 = 1_000_000;
 
 static mut LAPIC: Lapic = Lapic::new();
 

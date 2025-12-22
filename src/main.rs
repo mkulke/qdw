@@ -7,21 +7,25 @@ extern crate alloc;
 use alloc::format;
 use core::fmt::{LowerHex, Write};
 use core::sync::atomic::{AtomicUsize, Ordering};
+use ioapic::COM1_VECTOR;
 use lapic::{lapic, ERROR_VECTOR, SPURIOUS_VECTOR, TIMER_VECTOR};
 use linked_list_allocator::LockedHeap;
-use spin::{Mutex, Once};
+use spin::Once;
 use uart_16550::SerialPort;
 use x86_64::instructions::{self, interrupts};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
+mod com;
 mod fpu;
+mod ioapic;
+mod irq_mutex;
 mod lapic;
 mod mem;
+mod pic;
 
 static IDT: Once<InterruptDescriptorTable> = Once::new();
 static TICK_COUNT: AtomicUsize = AtomicUsize::new(0);
 static PRINT_EVENTS: AtomicUsize = AtomicUsize::new(0);
-static SERIAL1: Mutex<SerialPort> = Mutex::new(unsafe { SerialPort::new(0x3F8) });
 
 const TICKS_PER_3_SECONDS: usize = 55;
 
@@ -33,7 +37,7 @@ unsafe extern "C" {
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-pub fn init_heap() {
+fn init_heap() {
     unsafe {
         let start = &__heap_start as *const u8 as *mut u8;
         let end = &__heap_end as *const u8 as *mut u8;
@@ -58,6 +62,19 @@ extern "x86-interrupt" fn error_interrupt_handler(_sf: InterruptStackFrame) {
 }
 
 extern "x86-interrupt" fn spurious_interrupt_handler(_sf: InterruptStackFrame) {
+    lapic().eoi();
+}
+
+extern "x86-interrupt" fn com1_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    com::RX_QUEUE.with(|queue| {
+        let mut queue = queue.borrow_mut();
+        let (mut prod, _cons) = queue.split();
+        while com::uart_rx_ready() {
+            let byte = com::uart_read_byte();
+            // we want to ignore overflow here
+            _ = prod.enqueue(byte);
+        }
+    });
     lapic().eoi();
 }
 
@@ -111,6 +128,8 @@ fn init() {
         idt[TIMER_VECTOR].set_handler_fn(timer_interrupt_handler);
         idt[ERROR_VECTOR].set_handler_fn(error_interrupt_handler);
         idt[SPURIOUS_VECTOR].set_handler_fn(spurious_interrupt_handler);
+        idt[COM1_VECTOR].set_handler_fn(com1_interrupt_handler);
+
         idt
     });
     idt.load();
@@ -118,11 +137,11 @@ fn init() {
     lapic().init();
     lapic().enable();
 
+    pic::disable();
+    ioapic::init();
     interrupts::enable();
 
     fpu::enable_sse();
-
-    SERIAL1.lock().init();
 }
 
 #[unsafe(no_mangle)]
@@ -132,15 +151,24 @@ pub extern "C" fn kmain() -> ! {
     write_xmm_values();
 
     let mut tick_counter = 0;
+    let mut com1_port = com::new_com1();
     loop {
         instructions::hlt();
 
         let n = PRINT_EVENTS.swap(0, Ordering::AcqRel);
         for _ in 0..n {
-            let mut tty = SERIAL1.lock();
-            writeln!(tty, "tick 0x{0:02x}", tick_counter).unwrap();
-            dump_fpu_fxsave(&mut *tty);
+            writeln!(com1_port, "tick 0x{0:02x}", tick_counter).unwrap();
+            dump_fpu_fxsave(&mut com1_port);
             tick_counter += 1;
         }
+
+        com::RX_QUEUE.with(|queue| {
+            let mut queue = queue.borrow_mut();
+            let (_prod, mut cons) = queue.split();
+
+            while let Some(byte) = cons.dequeue() {
+                writeln!(com1_port, "COM1 RX: 0x{:02x} ('{}')", byte, byte as char).unwrap();
+            }
+        });
     }
 }

@@ -3,7 +3,7 @@ BITS 16
 ORG 0x7C00
 
 STAGE2_LBA equ 1
-STAGE2_SECTORS equ 128
+STAGE2_SECTORS equ 1024
 
 start:
     cli
@@ -38,8 +38,9 @@ start:
     jc  disk_error
 
     ; Jump to stage2 with boot drive in DL
+    ; Note: stage2 is loaded at 0x0800:0x0000 (physical 0x8000)
     mov dl, [boot_drive]
-    jmp 0x0000:0x8000
+    jmp 0x0800:0x0000
 
 disk_error:
     hlt
@@ -51,8 +52,8 @@ dap:
     db 0x10               ; size of DAP (16 bytes)
     db 0                  ; reserved (must be 0)
     dw STAGE2_SECTORS     ; number of sectors to read
-    dw 0x8000             ; offset (0x8000)
-    dw 0x0000             ; segment (0x0000)
+    dw 0x0000             ; offset (0x0000)
+    dw 0x0800             ; segment (0x0800) -> physical address 0x8000
     dq STAGE2_LBA         ; starting LBA (sector 1)
 
 boot_drive: db 0

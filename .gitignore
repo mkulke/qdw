@@ -2,4 +2,5 @@ os.img
 *.bin
 *.o
 *.elf
+*.lst
 /target

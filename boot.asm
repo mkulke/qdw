@@ -3,7 +3,7 @@ BITS 16
 ORG 0x7C00
 
 STAGE2_LBA equ 1
-STAGE2_SECTORS equ 1024
+STAGE2_SECTORS equ 128
 
 start:
     cli

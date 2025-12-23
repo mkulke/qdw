@@ -25,7 +25,7 @@ stage2.bin: stage2.elf
 	llvm-objcopy -O binary $< $@
 
 os.img: boot.bin stage2.bin
-	dd if=/dev/zero  of=os.img bs=512 count=256
+	dd if=/dev/zero  of=os.img bs=512 count=4096
 	dd if=boot.bin   of=os.img bs=512 seek=0 conv=notrunc
 	dd if=stage2.bin of=os.img bs=512 seek=1 conv=notrunc
 

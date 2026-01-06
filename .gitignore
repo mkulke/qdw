@@ -1,5 +1,6 @@
-os.img
+qdw.img
 *.bin
 *.o
 *.elf
 /target
+.cargo

@@ -1,7 +1,7 @@
 TARGET = x86_64-unknown-none
 
 .PHONY:
-all: os.img
+all: qdw.img
 
 boot.bin: boot.asm
 	nasm -f bin $< -o $@
@@ -24,23 +24,24 @@ stage2.elf: stage2.o rust.o link.ld
 stage2.bin: stage2.elf
 	llvm-objcopy -O binary $< $@
 
-os.img: boot.bin stage2.bin
-	dd if=/dev/zero  of=os.img bs=512 count=256
-	dd if=boot.bin   of=os.img bs=512 seek=0 conv=notrunc
-	dd if=stage2.bin of=os.img bs=512 seek=1 conv=notrunc
+qdw.img: boot.bin stage2.bin
+	dd if=/dev/zero  of=qdw.img bs=512 count=256
+	dd if=boot.bin   of=qdw.img bs=512 seek=0 conv=notrunc
+	dd if=stage2.bin of=qdw.img bs=512 seek=1 conv=notrunc
 
 .PHONY:
-run: os.img
+run: qdw.img
 	qemu-system-x86_64 \
 		-cpu qemu64 \
 		-nographic \
 		-no-reboot \
-		-drive format=raw,file=$(CURDIR)/os.img \
+		-drive format=raw,file=$(CURDIR)/qdw.img \
 		-accel kvm \
 		-smp cpus=1 \
-		-m 128M
+		-m 128M \
+		-device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 
 .PHONY:
 clean:
-	rm -rf *.bin *.elf *.o target os.img
+	rm -rf *.bin *.elf *.o target qdw.img

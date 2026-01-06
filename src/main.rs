@@ -78,9 +78,29 @@ extern "x86-interrupt" fn com1_interrupt_handler(_stack_frame: InterruptStackFra
     lapic().eoi();
 }
 
+#[repr(u32)]
+pub enum QemuExitCode {
+    Success = 0x10,
+    Failed = 0x11,
+}
+
+fn exit_qemu(exit_code: QemuExitCode) -> ! {
+    use x86_64::instructions::{nop, port::Port};
+
+    unsafe {
+        let mut port = Port::new(0xf4);
+        port.write(exit_code as u32);
+    }
+
+    loop {
+        nop();
+    }
+}
+
 #[panic_handler]
-fn panic(__info: &core::panic::PanicInfo) -> ! {
-    loop {}
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    let _ = writeln!(com::new_com1(), "PANIC: {}", info);
+    exit_qemu(QemuExitCode::Failed);
 }
 
 fn write_xmm_values() {
@@ -168,6 +188,9 @@ pub extern "C" fn kmain() -> ! {
 
             while let Some(byte) = cons.dequeue() {
                 writeln!(com1_port, "COM1 RX: 0x{:02x} ('{}')", byte, byte as char).unwrap();
+                if byte == b'q' {
+                    exit_qemu(QemuExitCode::Success);
+                }
             }
         });
     }
